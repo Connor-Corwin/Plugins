@@ -108,7 +108,6 @@ SPXAmbienceAudioProcessorEditor::SPXAmbienceAudioProcessorEditor (SPXAmbienceAud
     for (const auto& binding : bindings)
     {
         addAndMakeVisible (binding.knob);
-        binding.knob.onHighlight = [this] (KnobPanel& knob) { highlight (knob); };
 
         // The parameter owns the formatting, so the knob and the host agree.
         if (auto* param = processor.apvts.getParameter (binding.id))
@@ -124,6 +123,11 @@ SPXAmbienceAudioProcessorEditor::SPXAmbienceAudioProcessorEditor (SPXAmbienceAud
 
         attachments.push_back (std::make_unique<Attachment> (processor.apvts, binding.id, binding.knob.slider));
     }
+
+    // Hooked up only once the attachments have pushed their initial values,
+    // so opening the editor doesn't leave a knob name sitting in the readout.
+    for (const auto& binding : bindings)
+        binding.knob.onHighlight = [this] (KnobPanel& knob) { highlight (knob); };
 
     setResizable (true, true);
 
@@ -208,7 +212,8 @@ void SPXAmbienceAudioProcessorEditor::paint (juce::Graphics& g)
     // --- footer -------------------------------------------------------------
     g.setColour (Palette::textDim.withAlpha (0.7f));
     g.setFont (panelFont (9.0f * s));
-    g.drawText ("SPX900-style ambience  \xc2\xb7  16-tap early reflections into an 8-line tail",
+    g.drawText (juce::CharPointer_UTF8 ("SPX900-style ambience  \xc2\xb7  "
+                                        "16-tap early reflections into an 8-line tail"),
                 juce::Rectangle<float> (22.0f * s, getHeight() - 26.0f * s, getWidth() - 44.0f * s, 16.0f * s),
                 juce::Justification::centredLeft, false);
 }

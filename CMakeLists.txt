@@ -30,6 +30,16 @@ if(SPX_BUILD_TESTS)
         target_compile_options(SPXAmbienceDspTest PRIVATE -Wall -Wextra)
     endif()
 
+    add_executable(SPXAmbienceDspBench
+        tools/DspBench.cpp
+        Source/dsp/AmbienceEngine.cpp)
+
+    target_include_directories(SPXAmbienceDspBench PRIVATE Source/dsp)
+
+    if(NOT MSVC)
+        target_compile_options(SPXAmbienceDspBench PRIVATE -Wall -Wextra)
+    endif()
+
     enable_testing()
     add_test(NAME dsp COMMAND SPXAmbienceDspTest)
 endif()
@@ -111,8 +121,10 @@ if(SPX_BUILD_PREVIEW)
 
     # The editor sources reference the JucePlugin_* definitions that
     # juce_add_plugin normally supplies, so borrow them from the plugin target.
-    target_compile_definitions(SPXAmbiencePreview PRIVATE
-        $<TARGET_PROPERTY:SPXAmbience,INTERFACE_COMPILE_DEFINITIONS>)
+    # JUCE_STANDALONE_APPLICATION is dropped: the console app sets its own.
+    get_target_property(spx_plugin_defs SPXAmbience INTERFACE_COMPILE_DEFINITIONS)
+    list(FILTER spx_plugin_defs EXCLUDE REGEX "^JUCE_STANDALONE_APPLICATION")
+    target_compile_definitions(SPXAmbiencePreview PRIVATE ${spx_plugin_defs})
 
     target_link_libraries(SPXAmbiencePreview
         PRIVATE

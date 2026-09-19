@@ -10,20 +10,8 @@ control reaches all the way to 10 s when you want a wash.
 Builds as **AU**, **VST3** and a **Standalone** app, as a universal
 (Apple Silicon + Intel) binary.
 
-```
-┌──────────────────────────────────────────────────────────┐
-│  SPX AMBIENCE                        ┌────────────────┐  │
-│  DIGITAL AMBIENCE PROCESSOR          │  REV TIME 1.20s│  │
-│                                      └────────────────┘  │
-│  REVERB ─────────────────────────────────────────────────│
-│     ( )         ( )         ( )         ( )              │
-│  PRE-DELAY   REV TIME     DECAY        SIZE              │
-│                                                          │
-│  LEVELS ─────────────────────────────────────────────────│
-│        ( )            ( )            ( )                 │
-│      INPUT           MIX           OUTPUT                │
-└──────────────────────────────────────────────────────────┘
-```
+![SPX Ambience](docs/plugin.png)
+
 
 ## Controls
 
@@ -88,6 +76,20 @@ without Gatekeeper complaints, ad-hoc sign it at minimum:
 codesign --force --deep -s - ~/Library/Audio/Plug-Ins/Components/"SPX Ambience.component"
 ```
 
+## Regenerating the screenshot
+
+The image above is rendered from the real editor, with no host and no
+display, by `tools/PreviewRender.cpp`:
+
+```sh
+cmake -S . -B build -DSPX_BUILD_PREVIEW=ON
+cmake --build build --target SPXAmbiencePreview
+./build/SPXAmbiencePreview_artefacts/Debug/SPXAmbiencePreview docs/plugin.png 2
+```
+
+It is also a quick way to check that `paint()` and `resized()` still run
+clean after a layout change.
+
 ## Testing the DSP
 
 The reverb core in `Source/dsp/` has **no JUCE dependency**, so it builds and
@@ -111,6 +113,24 @@ ctest --test-dir build-test --output-on-failure
 - **Bypass transparency** at 0 % mix (bit-identical).
 - **Stability** — a minute of silence after a full-scale burst into a 10 s
   tail, checking for NaN, runaway feedback and denormal stalls.
+
+## Cost
+
+Measured on the container this was developed in (x86-64, `-O2`), rendering
+60 s of stereo audio at a 2 s reverb time:
+
+| Sample rate | Realtime factor | One core |
+|---|---|---|
+| 44.1 kHz | 152× | 0.66 % |
+| 48 kHz | 146× | 0.69 % |
+| 96 kHz | 76× | 1.31 % |
+
+Reproduce with `tools/DspBench.cpp`:
+
+```sh
+cmake --build build-test --target SPXAmbienceDspBench
+./build-test/SPXAmbienceDspBench
+```
 
 ## How it works
 
