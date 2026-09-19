@@ -1,0 +1,12 @@
+build/
+cmake-build-*/
+*.o
+*.a
+*.dylib
+*.vst3
+*.component
+.DS_Store
+.vscode/
+.idea/
+*.xcodeproj/
+JuceLibraryCode/
