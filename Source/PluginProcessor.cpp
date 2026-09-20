@@ -1,29 +1,12 @@
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
+#include "Presets.h"
 
 using Engine = spx::AmbienceEngine;
 
 namespace
 {
-    struct Program
-    {
-        const char* name;
-        float input, preDelay, time, decay, size, mix, output;
-    };
-
-    // Factory programs. The first is the plugin's default: the short, dense
-    // room the SPX900 Ambience algorithm is known for.
-    const Program kPrograms[] =
-    {
-        { "SPX Ambience",    0.0f,  12.0f,  1.20f, 45.0f, 40.0f, 30.0f, 0.0f },
-        { "Tight Room",      0.0f,   4.0f,  0.45f, 18.0f, 18.0f, 26.0f, 0.0f },
-        { "Drum Ambience",   0.0f,  18.0f,  0.90f, 62.0f, 34.0f, 38.0f, 0.0f },
-        { "Vocal Space",     0.0f,  34.0f,  1.80f, 40.0f, 52.0f, 24.0f, 0.0f },
-        { "Wide Chamber",    0.0f,  22.0f,  3.20f, 70.0f, 72.0f, 32.0f, 0.0f },
-        { "Long Hall",       0.0f,  45.0f,  7.00f, 80.0f, 92.0f, 28.0f, 0.0f }
-    };
-
-    constexpr int kNumPrograms = static_cast<int> (std::size (kPrograms));
+    constexpr int kNumPrograms = static_cast<int> (spx::kNumPresets);
 
     juce::String formatSeconds (float seconds)
     {
@@ -188,7 +171,9 @@ int SPXAmbienceAudioProcessor::getNumPrograms() { return kNumPrograms; }
 
 const juce::String SPXAmbienceAudioProcessor::getProgramName (int index)
 {
-    return juce::isPositiveAndBelow (index, kNumPrograms) ? kPrograms[index].name : juce::String();
+    return juce::isPositiveAndBelow (index, kNumPrograms)
+               ? juce::String (spx::kPresets[static_cast<std::size_t> (index)].name)
+               : juce::String();
 }
 
 void SPXAmbienceAudioProcessor::setCurrentProgram (int index)
@@ -197,7 +182,7 @@ void SPXAmbienceAudioProcessor::setCurrentProgram (int index)
         return;
 
     currentProgram = index;
-    const auto& program = kPrograms[index];
+    const auto& program = spx::kPresets[static_cast<std::size_t> (index)];
 
     auto apply = [this] (const char* id, float value)
     {
@@ -205,13 +190,13 @@ void SPXAmbienceAudioProcessor::setCurrentProgram (int index)
             p->setValueNotifyingHost (p->convertTo0to1 (value));
     };
 
-    apply (ParamID::input,    program.input);
-    apply (ParamID::preDelay, program.preDelay);
-    apply (ParamID::time,     program.time);
-    apply (ParamID::decay,    program.decay);
-    apply (ParamID::size,     program.size);
-    apply (ParamID::mix,      program.mix);
-    apply (ParamID::output,   program.output);
+    apply (ParamID::input,    program.inputDb);
+    apply (ParamID::preDelay, program.preDelayMs);
+    apply (ParamID::time,     program.reverbTimeS);
+    apply (ParamID::decay,    program.decayPercent);
+    apply (ParamID::size,     program.sizePercent);
+    apply (ParamID::mix,      program.mixPercent);
+    apply (ParamID::output,   program.outputDb);
 }
 
 //==============================================================================

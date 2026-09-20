@@ -76,6 +76,32 @@ without Gatekeeper complaints, ad-hoc sign it at minimum:
 codesign --force --deep -s - ~/Library/Audio/Plug-Ins/Components/"SPX Ambience.component"
 ```
 
+## Rendering audio offline
+
+`SPXAmbienceRender` runs a file through every factory preset and writes one
+WAV per preset, which is the quickest way to compare the presets against each
+other — or this reverb against another one — without a DAW in the way. It is
+built by default alongside the plugin:
+
+```sh
+./build/SPXAmbienceRender_artefacts/Release/SPXAmbienceRender drums.wav
+```
+
+That writes six 24-bit WAVs into `drums renders/` next to the input, each with
+enough silence appended that the tail is not cut off.
+
+| Option | Effect |
+|---|---|
+| `--mix 100` | Override every preset's mix. 100 renders wet only, which is what you want when A/B-ing against another reverb. |
+| `--tail 6` | Fixed tail length in seconds, instead of the automatic reverb time + pre-delay + 0.5 s. |
+| `--preset 3` | Render one preset only (1-based). |
+| `--list` | Print the presets and their settings. |
+
+Any format JUCE reads works as input, mono or stereo; output is always 24-bit
+stereo at the input's sample rate. The renderer runs the same engine as the
+plugin, driven from the same table in `Source/Presets.h`, so a render is what
+that program sounds like in a host.
+
 ## Regenerating the screenshot
 
 The image above is rendered from the real editor, with no host and no

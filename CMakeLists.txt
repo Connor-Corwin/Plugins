@@ -14,6 +14,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 option(SPX_BUILD_PLUGIN "Build the AU/VST3/Standalone plugin (requires JUCE)" ON)
 option(SPX_BUILD_TESTS  "Build the standalone DSP measurement harness" ON)
 option(SPX_BUILD_PREVIEW "Build the offscreen editor screenshot tool" OFF)
+option(SPX_BUILD_RENDER "Build the offline WAV renderer" ON)
 
 #==============================================================================
 # The reverb core has no JUCE dependency, so it can be built and measured on
@@ -102,6 +103,33 @@ target_link_libraries(SPXAmbience
         juce::juce_recommended_config_flags
         juce::juce_recommended_lto_flags
         juce::juce_recommended_warning_flags)
+
+#==============================================================================
+# Offline WAV renderer. Needs JUCE only for file I/O - the reverb it runs is
+# the same engine the plugin uses, driven from the same preset table.
+#==============================================================================
+if(SPX_BUILD_RENDER)
+    juce_add_console_app(SPXAmbienceRender PRODUCT_NAME "SPXAmbienceRender")
+
+    target_sources(SPXAmbienceRender PRIVATE
+        tools/RenderFile.cpp
+        Source/dsp/AmbienceEngine.cpp)
+
+    target_include_directories(SPXAmbienceRender PRIVATE Source)
+
+    target_compile_definitions(SPXAmbienceRender PRIVATE
+        JUCE_WEB_BROWSER=0
+        JUCE_USE_CURL=0
+        JUCE_USE_OGGVORBIS=0
+        JUCE_USE_FLAC=0)
+
+    target_link_libraries(SPXAmbienceRender
+        PRIVATE
+            juce::juce_audio_formats
+        PUBLIC
+            juce::juce_recommended_config_flags
+            juce::juce_recommended_warning_flags)
+endif()
 
 #==============================================================================
 # Offscreen editor renderer, used to regenerate the README screenshot. Renders
