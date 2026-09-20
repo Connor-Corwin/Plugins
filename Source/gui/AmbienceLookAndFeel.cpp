@@ -28,7 +28,7 @@ void AmbienceLookAndFeel::drawRotarySlider (juce::Graphics& g, int x, int y, int
 
     const float angle = rotaryStartAngle + sliderPos * (rotaryEndAngle - rotaryStartAngle);
 
-    // A Gain knob whose band is in Pass mode is greyed out rather than hidden,
+    // A Gain knob whose band is in HPF or LPF mode is greyed out rather than hidden,
     // so the panel does not reflow when the mode changes.
     const bool enabled = slider.isEnabled();
     const auto accent = slider.findColour (juce::Slider::rotarySliderFillColourId)

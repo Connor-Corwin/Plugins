@@ -26,7 +26,7 @@ public:
     void setUiScale (float s) { uiScale = s; }
 
     /** Greys the control out without hiding it, used for a Gain knob whose
-        band is in Pass mode. */
+        band is in HPF or LPF mode. */
     void setKnobEnabled (bool shouldBeEnabled);
 
 private:
@@ -38,18 +38,20 @@ private:
 };
 
 //==============================================================================
-/** Two-segment Shelf / Pass switch. Toggle state false is Shelf, true is Pass,
-    matching the bool parameter it attaches to. */
+/** Two-segment mode switch. Toggle state false is Shelf, true is the band's
+    filter mode, matching the bool parameter it attaches to. The filter label
+    differs per band: HPF on the low band, LPF on the high one. */
 class ModeSwitch : public juce::Button
 {
 public:
-    explicit ModeSwitch (juce::Colour accent);
+    ModeSwitch (juce::Colour accent, juce::String filterLabel);
 
     void paintButton (juce::Graphics&, bool isMouseOver, bool isButtonDown) override;
     void setUiScale (float s) { uiScale = s; }
 
 private:
     juce::Colour accentColour;
+    juce::String filterModeLabel;
     float uiScale = 1.0f;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ModeSwitch)
@@ -91,8 +93,8 @@ private:
     KnobPanel highFreqKnob { "HIGH FREQ", spxui::Palette::accentEq, 0.58f };
     KnobPanel highGainKnob { "HIGH GAIN", spxui::Palette::accentEq, 0.58f };
 
-    ModeSwitch lowModeSwitch  { spxui::Palette::accentEq };
-    ModeSwitch highModeSwitch { spxui::Palette::accentEq };
+    ModeSwitch lowModeSwitch  { spxui::Palette::accentEq, "HPF" };
+    ModeSwitch highModeSwitch { spxui::Palette::accentEq, "LPF" };
 
     KnobPanel inputKnob    { "INPUT",  spxui::Palette::accentCool, 0.58f };
     KnobPanel mixKnob      { "MIX",    spxui::Palette::accentCool, 0.58f };
@@ -101,7 +103,7 @@ private:
     std::vector<std::unique_ptr<Attachment>> attachments;
     std::unique_ptr<ButtonAttachment> lowModeAttachment, highModeAttachment;
 
-    // Watch the mode parameters so the Gain knobs grey out in Pass mode.
+    // Watch the mode parameters so the Gain knobs grey out in HPF/LPF mode.
     std::unique_ptr<juce::ParameterAttachment> lowModeWatcher, highModeWatcher;
 
     juce::String readoutText { "AMBIENCE PROCESSOR" };

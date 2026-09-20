@@ -494,7 +494,7 @@ void testToneFilterShapes (double sampleRate)
         near (biquadGainDb (f, 200.0, sampleRate), 0.0, 0.5, "  same filter at 200 Hz");
     }
 
-    // Pass modes: -3 dB at the corner, 12 dB per octave beyond it.
+    // HPF and LPF: -3 dB at the corner, 12 dB per octave beyond it.
     {
         spx::Biquad f;
         f.setHighPass (500.0f, spx::AmbienceEngine::kPassQ, sampleRate);
@@ -570,7 +570,7 @@ void testEqIsWetOnly (double sampleRate)
         maxError = std::max (maxError, std::fabs (static_cast<double> (l[i] - reference[i])));
 
     char detail[160];
-    std::snprintf (detail, sizeof (detail), "max deviation %.3g with both bands in Pass mode", maxError);
+    std::snprintf (detail, sizeof (detail), "max deviation %.3g with the low band in HPF and the high band in LPF", maxError);
     check (maxError < 1.0e-6, "0% mix still passes dry untouched", detail);
 }
 
@@ -596,7 +596,7 @@ void testEqShapesTheTail (double sampleRate)
     const double flatLow  = bandEnergyDb (flat, 100.0);
     const double flatHigh = bandEnergyDb (flat, 6000.0);
 
-    // Low band, Pass mode at 1.5 kHz: the 100 Hz octave should collapse.
+    // Low band, HPF at 1.5 kHz: the 100 Hz octave should collapse.
     auto lowCut = flat;
     lowCut.lowEqMode = AmbienceEngine::BandMode::pass;
     lowCut.lowEqHz = 1500.0f;
@@ -604,16 +604,16 @@ void testEqShapesTheTail (double sampleRate)
 
     char detail[160];
     std::snprintf (detail, sizeof (detail), "100 Hz octave drops %.1f dB", flatLow - cutLow);
-    check (flatLow - cutLow > 20.0, "Low band in Pass mode removes lows", detail);
+    check (flatLow - cutLow > 20.0, "Low band in HPF mode removes lows", detail);
 
-    // High band, Pass mode at 1.5 kHz: the 6 kHz octave should collapse.
+    // High band, LPF at 1.5 kHz: the 6 kHz octave should collapse.
     auto highCut = flat;
     highCut.highEqMode = AmbienceEngine::BandMode::pass;
     highCut.highEqHz = 1500.0f;
     const double cutHigh = bandEnergyDb (highCut, 6000.0);
 
     std::snprintf (detail, sizeof (detail), "6 kHz octave drops %.1f dB", flatHigh - cutHigh);
-    check (flatHigh - cutHigh > 15.0, "High band in Pass mode removes highs", detail);
+    check (flatHigh - cutHigh > 15.0, "High band in LPF mode removes highs", detail);
 
     // Shelves move the same bands by roughly their gain setting.
     auto lowBoost = flat;

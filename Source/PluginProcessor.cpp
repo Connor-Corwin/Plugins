@@ -78,7 +78,10 @@ juce::AudioProcessorValueTreeState::ParameterLayout SPXAmbienceAudioProcessor::c
         return (v > 0.0f ? "+" : "") + juce::String (v, 1) + " dB";
     };
 
-    auto modeText = [] (bool v, int) { return juce::String (v ? "Pass" : "Shelf"); };
+    // Named per band, so a host's automation lane says which way the filter
+    // goes rather than just "Pass".
+    auto lowModeText  = [] (bool v, int) { return juce::String (v ? "HPF" : "Shelf"); };
+    auto highModeText = [] (bool v, int) { return juce::String (v ? "LPF" : "Shelf"); };
 
     // Logarithmic, so the knobs feel even across their range.
     Range lowFreqRange { Engine::kMinLowEqHz, Engine::kMaxLowEqHz, 1.0f };
@@ -99,7 +102,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout SPXAmbienceAudioProcessor::c
 
     layout.add (std::make_unique<juce::AudioParameterBool> (
         juce::ParameterID { ParamID::lowEqMode, 1 }, "Low Mode", false,
-        juce::AudioParameterBoolAttributes{}.withStringFromValueFunction (modeText)));
+        juce::AudioParameterBoolAttributes{}.withStringFromValueFunction (lowModeText)));
 
     layout.add (std::make_unique<juce::AudioParameterFloat> (
         juce::ParameterID { ParamID::highEqFreq, 1 }, "High Freq", highFreqRange, 8000.0f,
@@ -111,7 +114,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout SPXAmbienceAudioProcessor::c
 
     layout.add (std::make_unique<juce::AudioParameterBool> (
         juce::ParameterID { ParamID::highEqMode, 1 }, "High Mode", false,
-        juce::AudioParameterBoolAttributes{}.withStringFromValueFunction (modeText)));
+        juce::AudioParameterBoolAttributes{}.withStringFromValueFunction (highModeText)));
 
     return layout;
 }

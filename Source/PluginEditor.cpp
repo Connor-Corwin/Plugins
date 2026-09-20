@@ -97,7 +97,8 @@ void KnobPanel::paint (juce::Graphics& g)
 }
 
 //==============================================================================
-ModeSwitch::ModeSwitch (juce::Colour accent) : juce::Button ("mode"), accentColour (accent)
+ModeSwitch::ModeSwitch (juce::Colour accent, juce::String filterLabel)
+    : juce::Button ("mode"), accentColour (accent), filterModeLabel (std::move (filterLabel))
 {
     setClickingTogglesState (true);
 }
@@ -106,14 +107,14 @@ void ModeSwitch::paintButton (juce::Graphics& g, bool isMouseOver, bool isButton
 {
     const auto bounds = getLocalBounds().toFloat().reduced (0.5f);
     const float radius = bounds.getHeight() * 0.5f;
-    const bool isPass = getToggleState();
+    const bool isFilter = getToggleState();
 
     g.setColour (Palette::lcdBack);
     g.fillRoundedRectangle (bounds, radius);
 
     // The lit half is whichever mode is selected.
-    auto selected = isPass ? bounds.withTrimmedLeft (bounds.getWidth() * 0.5f)
-                           : bounds.withTrimmedRight (bounds.getWidth() * 0.5f);
+    auto selected = isFilter ? bounds.withTrimmedLeft (bounds.getWidth() * 0.5f)
+                             : bounds.withTrimmedRight (bounds.getWidth() * 0.5f);
 
     const float alpha = isButtonDown ? 1.0f : (isMouseOver ? 0.9f : 0.78f);
     g.setColour (accentColour.withAlpha (alpha));
@@ -127,11 +128,11 @@ void ModeSwitch::paintButton (juce::Graphics& g, bool isMouseOver, bool isButton
     const auto leftHalf  = bounds.withTrimmedRight (bounds.getWidth() * 0.5f);
     const auto rightHalf = bounds.withTrimmedLeft (bounds.getWidth() * 0.5f);
 
-    g.setColour (isPass ? Palette::textDim : Palette::panelEdge);
+    g.setColour (isFilter ? Palette::textDim : Palette::panelEdge);
     g.drawText ("SHELF", leftHalf, juce::Justification::centred, false);
 
-    g.setColour (isPass ? Palette::panelEdge : Palette::textDim);
-    g.drawText ("PASS", rightHalf, juce::Justification::centred, false);
+    g.setColour (isFilter ? Palette::panelEdge : Palette::textDim);
+    g.drawText (filterModeLabel, rightHalf, juce::Justification::centred, false);
 }
 
 //==============================================================================
@@ -184,7 +185,7 @@ SPXAmbienceAudioProcessorEditor::SPXAmbienceAudioProcessorEditor (SPXAmbienceAud
     highModeAttachment = std::make_unique<ButtonAttachment> (
         processor.apvts, SPXAmbienceAudioProcessor::ParamID::highEqMode, highModeSwitch);
 
-    // Gain does nothing in Pass mode, so the knob greys out rather than
+    // Gain does nothing in HPF/LPF mode, so the knob greys out rather than
     // sitting there looking live.
     if (auto* lowMode = processor.apvts.getParameter (SPXAmbienceAudioProcessor::ParamID::lowEqMode))
     {

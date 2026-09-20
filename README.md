@@ -61,10 +61,14 @@ bypass stays bit-perfect no matter how the EQ is set. They meet at 1.5 kHz.
 | Control | Range | What it does |
 |---|---|---|
 | **Low Freq** | 20 Hz … 1.5 kHz | Corner frequency of the low band. |
-| **Low Gain** | −6 … +6 dB | Shelf amount. Greys out in Pass mode. |
+| **Low Gain** | −6 … +6 dB | Shelf amount. Greys out in HPF mode. |
 | **High Freq** | 1.5 kHz … 20 kHz | Corner frequency of the high band. |
-| **High Gain** | −6 … +6 dB | Shelf amount. Greys out in Pass mode. |
-| **Shelf / Pass** | per band | **Shelf** boosts or cuts past the corner. **Pass** ignores Gain and becomes a 12 dB/octave filter: high-pass on the Low band, low-pass on the High band. Both in Pass mode gives you a band-pass on the reverb. |
+| **High Gain** | −6 … +6 dB | Shelf amount. Greys out in LPF mode. |
+| **Shelf / HPF** | Low band | **Shelf** boosts or cuts below the corner. **HPF** ignores Gain and becomes a 12 dB/octave high-pass. |
+| **Shelf / LPF** | High band | **Shelf** boosts or cuts above the corner. **LPF** ignores Gain and becomes a 12 dB/octave low-pass. |
+
+Set the Low band to HPF and the High band to LPF and you have a band-pass
+across the reverb.
 
 Both bands default to Shelf at 0 dB, which is skipped in the signal path
 entirely rather than computed as a flat filter. Every factory preset leaves
@@ -191,10 +195,10 @@ ctest --test-dir build-test --output-on-failure
 - **Size** pushing reflection energy later.
 - **Pre-delay** offsetting the wet onset.
 - **L/R decorrelation** of the impulse response.
-- **Bypass transparency** at 0 % mix (bit-identical), including with both EQ
-  bands in Pass mode, which is what proves the EQ is wet-only.
+- **Bypass transparency** at 0 % mix (bit-identical), including with the EQ
+  in HPF/LPF mode, which is what proves the EQ is wet-only.
 - **Tone filter responses** — shelf gains at ±6 dB, and −3 dB at the corner
-  with 12 dB/octave beyond it for the Pass modes, measured by DFT of each
+  with 12 dB/octave beyond it for the HPF and LPF modes, measured by DFT of each
   filter's impulse response.
 - **EQ neutrality** — a 0 dB shelf produces a bit-identical impulse response
   whatever its frequency.

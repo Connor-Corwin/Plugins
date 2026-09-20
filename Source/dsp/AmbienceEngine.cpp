@@ -191,7 +191,7 @@ void AmbienceEngine::setParameters (const Parameters& p, bool snap)
     highEqLogHz.setTarget (std::log (params.highEqHz));
     highEqGain.setTarget  (params.highEqGainDb);
 
-    // In Pass mode the band always does something; in Shelf mode a flat
+    // In HPF/LPF mode the band always does something; in Shelf mode a flat
     // setting is skipped entirely, which is what keeps the defaults
     // bit-transparent.
     lowBandActive  = params.lowEqMode == BandMode::pass

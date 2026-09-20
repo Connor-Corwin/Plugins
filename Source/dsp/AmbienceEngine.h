@@ -50,7 +50,7 @@ public:
     static constexpr float kMaxHighEqHz  = 20000.0f;
     static constexpr float kMaxEqGainDb  = 6.0f;
 
-    /** Butterworth, 12 dB/octave, for the two Pass modes. */
+    /** Butterworth, 12 dB/octave, for the HPF and LPF modes. */
     static constexpr float kPassQ = 0.70710678f;
 
     /** A shelf within this much of flat is skipped rather than computed, so
@@ -60,7 +60,7 @@ public:
     enum class BandMode
     {
         shelf = 0,   /**< Low band: low shelf. High band: high shelf. */
-        pass  = 1    /**< Low band: high-pass. High band: low-pass. */
+        pass  = 1    /**< Low band: high-pass (HPF). High band: low-pass (LPF). */
     };
 
     struct Parameters
@@ -75,10 +75,10 @@ public:
 
         // Tone controls, applied to the wet signal only.
         float    lowEqHz    = 120.0f;             // 20 .. 1500 Hz
-        float    lowEqGainDb = 0.0f;              // -6 .. +6 dB (shelf mode only)
+        float    lowEqGainDb = 0.0f;              // -6 .. +6 dB (Shelf mode only)
         BandMode lowEqMode  = BandMode::shelf;
         float    highEqHz   = 8000.0f;            // 1500 .. 20000 Hz
-        float    highEqGainDb = 0.0f;             // -6 .. +6 dB (shelf mode only)
+        float    highEqGainDb = 0.0f;             // -6 .. +6 dB (Shelf mode only)
         BandMode highEqMode = BandMode::shelf;
     };
 

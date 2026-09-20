@@ -6,8 +6,8 @@
 //     cmake --build build --target SPXAmbiencePreview
 //     ./build/SPXAmbiencePreview docs/plugin.png [scale] [--pass]
 //
-// --pass flips both EQ bands to Pass mode before rendering, which is how the
-// Gain knobs' greyed-out state gets checked.
+// --pass flips the EQ bands to their filter modes (HPF and LPF) before
+// rendering, which is how the Gain knobs' greyed-out state gets checked.
 
 #include "../Source/PluginEditor.h"
 #include "../Source/PluginProcessor.h"
