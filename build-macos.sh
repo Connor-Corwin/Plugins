@@ -57,6 +57,34 @@ echo "  cmake       : $cmake_version"
 echo "  building in : $BUILD_DIR"
 
 #------------------------------------------------------------------------------
+# A running host holds the installed bundle open, so the copy at the end of the
+# build can fail, and the host keeps serving the old binary either way.
+running_hosts=""
+while IFS= read -r host; do
+    if pgrep -x "$host" >/dev/null 2>&1; then
+        running_hosts="${running_hosts}  ${host} is running"$'\n'
+    fi
+done <<'HOSTS'
+Logic Pro
+GarageBand
+Ableton Live
+Live
+Reaper
+REAPER
+Studio One
+Bitwig Studio
+Cubase
+FL Studio
+SPX Ambience
+HOSTS
+
+if [[ -n "$running_hosts" ]]; then
+    say "Quit these before installing"
+    printf '%s' "$running_hosts"
+    die "a running host keeps the old plugin loaded and can block the install.
+Quit the app(s) above and run this script again."
+fi
+
 if [[ $do_clean -eq 1 && -d "$BUILD_DIR" ]]; then
     say "Removing the previous build directory"
     rm -rf "$BUILD_DIR"
@@ -78,6 +106,8 @@ readonly VST3_BUNDLE="$VST3_DIR/SPX Ambience.vst3"
 
 say "Checking what was installed"
 installed=0
+version="$(awk -F'[ )]' '/^project\(SPXAmbience VERSION/ {print $3}' "$ROOT/CMakeLists.txt")"
+[[ -n "$version" ]] && echo "  version     : $version"
 for bundle in "$AU_BUNDLE" "$VST3_BUNDLE"; do
     if [[ -d "$bundle" ]]; then
         echo "  ok  $bundle"

@@ -41,6 +41,26 @@ paid Avid developer agreement and PACE signing, so it is not something this
 project can produce. Every other major macOS DAW is covered by the AU or the
 VST3.
 
+## Updating an existing install
+
+**Quit your DAW first.** A running host holds the installed bundle open, so
+the install step can fail, and the host keeps serving the old plugin from
+memory either way. The script checks for this and stops with a clear message
+rather than half-installing.
+
+```sh
+git pull
+./build-macos.sh
+```
+
+The rebuild overwrites the AU and VST3 in place, so there is nothing to
+uninstall and no duplicate to clean up. Reopen your DAW afterwards; the script
+clears the AU cache so Logic and GarageBand rescan on next launch.
+
+Sessions saved with an older build open fine. Parameters added since are set
+to their defaults, and those defaults are deliberately neutral, so an old
+session sounds the same until you reach for the new controls.
+
 ## Controls
 
 | Control | Range | What it does |
