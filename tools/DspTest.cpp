@@ -61,8 +61,15 @@ std::vector<float> impulseResponse (const AmbienceEngine::Parameters& p,
     return l;
 }
 
-/** Second-order RBJ band-pass, used to isolate an octave band of the IR. */
-std::vector<float> bandPass (const std::vector<float>& in, double sampleRate, double centreHz, double q)
+/** Cascaded RBJ band-pass, used to isolate an octave band of the IR.
+
+    One section has 6 dB/octave skirts, which is fine for reading a decay
+    slope but nowhere near enough to measure how much energy a filter removed
+    from a band: broadband content several octaves away leaks straight into
+    the reading. `passes` cascades the section for 6 dB/octave each.
+*/
+std::vector<float> bandPass (const std::vector<float>& in, double sampleRate, double centreHz, double q,
+                             int passes = 1)
 {
     const double w0 = 2.0 * M_PI * centreHz / sampleRate;
     const double alpha = std::sin (w0) / (2.0 * q);
@@ -73,16 +80,20 @@ std::vector<float> bandPass (const std::vector<float>& in, double sampleRate, do
     const double a1 = (-2.0 * std::cos (w0)) / a0;
     const double a2 = ( 1.0 - alpha) / a0;
 
-    std::vector<float> out (in.size());
-    double x1 = 0.0, x2 = 0.0, y1 = 0.0, y2 = 0.0;
+    std::vector<float> out = in;
 
-    for (size_t i = 0; i < in.size(); ++i)
+    for (int pass = 0; pass < passes; ++pass)
     {
-        const double x = in[i];
-        const double y = b0 * x + b2 * x2 - a1 * y1 - a2 * y2;
-        x2 = x1; x1 = x;
-        y2 = y1; y1 = y;
-        out[i] = static_cast<float> (y);
+        double x1 = 0.0, x2 = 0.0, y1 = 0.0, y2 = 0.0;
+
+        for (size_t i = 0; i < out.size(); ++i)
+        {
+            const double x = out[i];
+            const double y = b0 * x + b2 * x2 - a1 * y1 - a2 * y2;
+            x2 = x1; x1 = x;
+            y2 = y1; y1 = y;
+            out[i] = static_cast<float> (y);
+        }
     }
 
     return out;
@@ -429,6 +440,199 @@ void testChannelDecorrelation (double sampleRate)
     check (std::fabs (correlation) < 0.4, "channels are decorrelated", detail);
 }
 
+//==============================================================================
+/** Magnitude response of a biquad at one frequency, by DFT of its impulse
+    response. */
+double biquadGainDb (spx::Biquad filter, double freqHz, double sampleRate)
+{
+    constexpr int n = 16384;
+    double re = 0.0, im = 0.0;
+
+    for (int i = 0; i < n; ++i)
+    {
+        const float y = filter.process (i == 0 ? 1.0f : 0.0f);
+        const double w = 2.0 * M_PI * freqHz * i / sampleRate;
+        re += y * std::cos (w);
+        im -= y * std::sin (w);
+    }
+
+    return 20.0 * std::log10 (std::sqrt (re * re + im * im));
+}
+
+void testToneFilterShapes (double sampleRate)
+{
+    std::printf ("\nTone filter responses\n");
+
+    auto near = [] (double value, double expected, double tolerance, const char* what)
+    {
+        char detail[160];
+        std::snprintf (detail, sizeof (detail), "%s: %+.2f dB (expected %+.1f +/- %.1f)",
+                       what, value, expected, tolerance);
+        check (std::fabs (value - expected) < tolerance, "response", detail);
+    };
+
+    // Low shelf: +6 dB below the corner, flat above it.
+    {
+        spx::Biquad f;
+        f.setLowShelf (200.0f, 6.0f, sampleRate);
+        near (biquadGainDb (f, 25.0, sampleRate), 6.0, 0.5, "low shelf +6 dB at 200 Hz, measured at 25 Hz");
+        near (biquadGainDb (f, 8000.0, sampleRate), 0.0, 0.5, "  same filter at 8 kHz");
+    }
+
+    // And symmetrically for a cut.
+    {
+        spx::Biquad f;
+        f.setLowShelf (200.0f, -6.0f, sampleRate);
+        near (biquadGainDb (f, 25.0, sampleRate), -6.0, 0.5, "low shelf -6 dB at 200 Hz, measured at 25 Hz");
+    }
+
+    // High shelf: +6 dB above the corner, flat below.
+    {
+        spx::Biquad f;
+        f.setHighShelf (5000.0f, 6.0f, sampleRate);
+        near (biquadGainDb (f, 18000.0, sampleRate), 6.0, 0.7, "high shelf +6 dB at 5 kHz, measured at 18 kHz");
+        near (biquadGainDb (f, 200.0, sampleRate), 0.0, 0.5, "  same filter at 200 Hz");
+    }
+
+    // Pass modes: -3 dB at the corner, 12 dB per octave beyond it.
+    {
+        spx::Biquad f;
+        f.setHighPass (500.0f, spx::AmbienceEngine::kPassQ, sampleRate);
+        near (biquadGainDb (f, 500.0, sampleRate), -3.0, 0.4, "high-pass at its 500 Hz corner");
+        near (biquadGainDb (f, 250.0, sampleRate), -12.3, 1.0, "  one octave below");
+        near (biquadGainDb (f, 4000.0, sampleRate), 0.0, 0.4, "  well above");
+    }
+
+    {
+        spx::Biquad f;
+        // Measured well away from Nyquist: the bilinear transform warps the
+        // response near it, so a digital filter rolls off faster there than
+        // the 12.3 dB an analogue prototype gives one octave up.
+        f.setLowPass (2000.0f, spx::AmbienceEngine::kPassQ, sampleRate);
+        near (biquadGainDb (f, 2000.0, sampleRate), -3.0, 0.4, "low-pass at its 2 kHz corner");
+        near (biquadGainDb (f, 4000.0, sampleRate), -12.3, 1.0, "  one octave above");
+        near (biquadGainDb (f, 250.0, sampleRate), 0.0, 0.4, "  well below");
+    }
+}
+
+void testEqDefaultsAreTransparent (double sampleRate)
+{
+    std::printf ("\nTone controls at their defaults\n");
+
+    AmbienceEngine::Parameters flat;          // shelf mode, 0 dB on both bands
+    flat.reverbTimeS = 1.5f;
+
+    auto moved = flat;                        // same, but with the frequency knobs elsewhere
+    moved.lowEqHz = 900.0f;
+    moved.highEqHz = 3000.0f;
+
+    const auto a = impulseResponse (flat, sampleRate, 1.5);
+    const auto b = impulseResponse (moved, sampleRate, 1.5);
+
+    double maxDifference = 0.0;
+    for (size_t i = 0; i < a.size(); ++i)
+        maxDifference = std::max (maxDifference, std::fabs (static_cast<double> (a[i] - b[i])));
+
+    char detail[160];
+    std::snprintf (detail, sizeof (detail), "max difference %.3g across the whole impulse response", maxDifference);
+    check (maxDifference == 0.0, "a 0 dB shelf is skipped, whatever its frequency", detail);
+}
+
+void testEqIsWetOnly (double sampleRate)
+{
+    std::printf ("\nTone controls are wet only\n");
+
+    AmbienceEngine::Parameters p;
+    p.mix = 0.0f;
+    p.reverbTimeS = 3.0f;
+    p.lowEqMode = AmbienceEngine::BandMode::pass;    // as destructive as the controls get
+    p.lowEqHz = AmbienceEngine::kMaxLowEqHz;
+    p.highEqMode = AmbienceEngine::BandMode::pass;
+    p.highEqHz = AmbienceEngine::kMinHighEqHz;
+
+    AmbienceEngine engine;
+    engine.prepare (sampleRate, 512);
+    engine.setParameters (p, true);
+
+    const int n = 8192;
+    std::vector<float> l (n), r (n), reference (n);
+
+    for (int i = 0; i < n; ++i)
+    {
+        const float v = std::sin (2.0f * 3.14159265f * 440.0f * static_cast<float> (i) / static_cast<float> (sampleRate));
+        l[i] = r[i] = reference[i] = v;
+    }
+
+    engine.process (l.data(), r.data(), n);
+
+    double maxError = 0.0;
+    for (int i = 0; i < n; ++i)
+        maxError = std::max (maxError, std::fabs (static_cast<double> (l[i] - reference[i])));
+
+    char detail[160];
+    std::snprintf (detail, sizeof (detail), "max deviation %.3g with both bands in Pass mode", maxError);
+    check (maxError < 1.0e-6, "0% mix still passes dry untouched", detail);
+}
+
+void testEqShapesTheTail (double sampleRate)
+{
+    std::printf ("\nTone controls shape the reverb\n");
+
+    AmbienceEngine::Parameters flat;
+    flat.reverbTimeS = 2.0f;
+    flat.size = 0.5f;
+
+    // Energy in an octave band of the wet impulse response.
+    auto bandEnergyDb = [&] (const AmbienceEngine::Parameters& p, double centreHz)
+    {
+        const auto ir = impulseResponse (p, sampleRate, 2.5);
+        const auto banded = bandPass (ir, sampleRate, centreHz, 1.0, 4);
+        double energy = 0.0;
+        for (float v : banded)
+            energy += static_cast<double> (v) * static_cast<double> (v);
+        return 10.0 * std::log10 (energy + 1.0e-30);
+    };
+
+    const double flatLow  = bandEnergyDb (flat, 100.0);
+    const double flatHigh = bandEnergyDb (flat, 6000.0);
+
+    // Low band, Pass mode at 1.5 kHz: the 100 Hz octave should collapse.
+    auto lowCut = flat;
+    lowCut.lowEqMode = AmbienceEngine::BandMode::pass;
+    lowCut.lowEqHz = 1500.0f;
+    const double cutLow = bandEnergyDb (lowCut, 100.0);
+
+    char detail[160];
+    std::snprintf (detail, sizeof (detail), "100 Hz octave drops %.1f dB", flatLow - cutLow);
+    check (flatLow - cutLow > 20.0, "Low band in Pass mode removes lows", detail);
+
+    // High band, Pass mode at 1.5 kHz: the 6 kHz octave should collapse.
+    auto highCut = flat;
+    highCut.highEqMode = AmbienceEngine::BandMode::pass;
+    highCut.highEqHz = 1500.0f;
+    const double cutHigh = bandEnergyDb (highCut, 6000.0);
+
+    std::snprintf (detail, sizeof (detail), "6 kHz octave drops %.1f dB", flatHigh - cutHigh);
+    check (flatHigh - cutHigh > 15.0, "High band in Pass mode removes highs", detail);
+
+    // Shelves move the same bands by roughly their gain setting.
+    auto lowBoost = flat;
+    lowBoost.lowEqGainDb = AmbienceEngine::kMaxEqGainDb;
+    lowBoost.lowEqHz = 200.0f;
+    const double boostLow = bandEnergyDb (lowBoost, 100.0) - flatLow;
+
+    std::snprintf (detail, sizeof (detail), "100 Hz octave rises %.1f dB for a +6 dB shelf", boostLow);
+    check (boostLow > 3.0 && boostLow < 9.0, "Low shelf boosts", detail);
+
+    auto highCutShelf = flat;
+    highCutShelf.highEqGainDb = -AmbienceEngine::kMaxEqGainDb;
+    highCutShelf.highEqHz = 4000.0f;
+    const double shelfHigh = flatHigh - bandEnergyDb (highCutShelf, 6000.0);
+
+    std::snprintf (detail, sizeof (detail), "6 kHz octave drops %.1f dB for a -6 dB shelf", shelfHigh);
+    check (shelfHigh > 3.0 && shelfHigh < 9.0, "High shelf cuts", detail);
+}
+
 } // namespace
 
 int main()
@@ -437,6 +641,10 @@ int main()
     {
         std::printf ("\n================ %.0f Hz ================\n", sampleRate);
         testReverbTimeAccuracy (sampleRate);
+        testToneFilterShapes (sampleRate);
+        testEqDefaultsAreTransparent (sampleRate);
+        testEqIsWetOnly (sampleRate);
+        testEqShapesTheTail (sampleRate);
         testDecayShapesEarlyReflections (sampleRate);
         testSizeAffectsDensity (sampleRate);
         testPreDelay (sampleRate);

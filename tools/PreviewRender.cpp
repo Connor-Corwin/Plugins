@@ -4,7 +4,10 @@
 //
 //     cmake -S . -B build -DSPX_BUILD_PREVIEW=ON
 //     cmake --build build --target SPXAmbiencePreview
-//     ./build/SPXAmbiencePreview docs/plugin.png [scale]
+//     ./build/SPXAmbiencePreview docs/plugin.png [scale] [--pass]
+//
+// --pass flips both EQ bands to Pass mode before rendering, which is how the
+// Gain knobs' greyed-out state gets checked.
 
 #include "../Source/PluginEditor.h"
 #include "../Source/PluginProcessor.h"
@@ -19,9 +22,27 @@ int main (int argc, char** argv)
 
     juce::ScopedJuceInitialiser_GUI juceInit;
 
-    const int scale = argc > 2 ? juce::jlimit (1, 4, std::atoi (argv[2])) : 2;
+    int scale = 2;
+    bool passMode = false;
+
+    for (int i = 2; i < argc; ++i)
+    {
+        const juce::String arg (argv[i]);
+        if (arg == "--pass")
+            passMode = true;
+        else
+            scale = juce::jlimit (1, 4, arg.getIntValue());
+    }
 
     SPXAmbienceAudioProcessor processor;
+
+    if (passMode)
+    {
+        for (const char* id : { SPXAmbienceAudioProcessor::ParamID::lowEqMode,
+                                SPXAmbienceAudioProcessor::ParamID::highEqMode })
+            if (auto* param = processor.apvts.getParameter (id))
+                param->setValueNotifyingHost (1.0f);
+    }
     std::unique_ptr<juce::AudioProcessorEditor> editor (processor.createEditor());
 
     if (editor == nullptr)

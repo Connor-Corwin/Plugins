@@ -24,6 +24,15 @@ struct Preset
     float sizePercent;    // %
     float mixPercent;     // %
     float outputDb;       // dB
+
+    // Wet-path tone controls. Every factory program leaves these flat, so a
+    // preset sounds exactly as it did before the EQ existed.
+    float lowEqHz = 120.0f;
+    float lowEqGainDb = 0.0f;
+    bool  lowEqPass = false;
+    float highEqHz = 8000.0f;
+    float highEqGainDb = 0.0f;
+    bool  highEqPass = false;
 };
 
 inline constexpr std::array<Preset, 6> kPresets
@@ -50,6 +59,14 @@ inline AmbienceEngine::Parameters toEngineParameters (const Preset& preset) noex
     p.reverbTimeS = preset.reverbTimeS;
     p.decay       = preset.decayPercent * 0.01f;
     p.size        = preset.sizePercent * 0.01f;
+
+    using Mode = AmbienceEngine::BandMode;
+    p.lowEqHz      = preset.lowEqHz;
+    p.lowEqGainDb  = preset.lowEqGainDb;
+    p.lowEqMode    = preset.lowEqPass ? Mode::pass : Mode::shelf;
+    p.highEqHz     = preset.highEqHz;
+    p.highEqGainDb = preset.highEqGainDb;
+    p.highEqMode   = preset.highEqPass ? Mode::pass : Mode::shelf;
     return p;
 }
 

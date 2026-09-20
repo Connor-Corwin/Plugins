@@ -43,6 +43,26 @@ public:
     static constexpr float kMinLevelDb      = -24.0f;
     static constexpr float kMaxLevelDb      = 24.0f;
 
+    // Wet-path tone controls. The two bands meet at 1.5 kHz.
+    static constexpr float kMinLowEqHz   = 20.0f;
+    static constexpr float kMaxLowEqHz   = 1500.0f;
+    static constexpr float kMinHighEqHz  = 1500.0f;
+    static constexpr float kMaxHighEqHz  = 20000.0f;
+    static constexpr float kMaxEqGainDb  = 6.0f;
+
+    /** Butterworth, 12 dB/octave, for the two Pass modes. */
+    static constexpr float kPassQ = 0.70710678f;
+
+    /** A shelf within this much of flat is skipped rather than computed, so
+        the default settings leave the wet path untouched. */
+    static constexpr float kEqBypassDb = 0.05f;
+
+    enum class BandMode
+    {
+        shelf = 0,   /**< Low band: low shelf. High band: high shelf. */
+        pass  = 1    /**< Low band: high-pass. High band: low-pass. */
+    };
+
     struct Parameters
     {
         float inputDb      = 0.0f;   // -24 .. +24 dB
@@ -52,6 +72,14 @@ public:
         float reverbTimeS  = 1.20f;  // 0.1 .. 10 s
         float decay        = 0.45f;  // 0 .. 1, early-reflection envelope
         float size         = 0.40f;  // 0 .. 1, room scale
+
+        // Tone controls, applied to the wet signal only.
+        float    lowEqHz    = 120.0f;             // 20 .. 1500 Hz
+        float    lowEqGainDb = 0.0f;              // -6 .. +6 dB (shelf mode only)
+        BandMode lowEqMode  = BandMode::shelf;
+        float    highEqHz   = 8000.0f;            // 1500 .. 20000 Hz
+        float    highEqGainDb = 0.0f;             // -6 .. +6 dB (shelf mode only)
+        BandMode highEqMode = BandMode::shelf;
     };
 
     void prepare (double sampleRateIn, int maxBlockSize);
@@ -69,6 +97,7 @@ private:
     void updateControlRate();
     void recomputeEarlyReflections();
     void recomputeTailGains();
+    void updateToneFilters();
     void snapSmoothers();
 
     double sampleRate = 44100.0;
@@ -112,6 +141,15 @@ private:
     float tailTimeUsed      = -1.0f;
 
     DCBlocker dcL, dcR;
+
+    // --- wet-path tone controls -------------------------------------------
+    // Frequencies are smoothed in the log domain so a sweep sounds even.
+    Smoother lowEqLogHz, lowEqGain, highEqLogHz, highEqGain;
+    Biquad   lowBandL, lowBandR, highBandL, highBandR;
+    bool     lowBandActive = false;
+    bool     highBandActive = false;
+    bool     lowBandWasActive = false;
+    bool     highBandWasActive = false;
 
     int controlCounter = 0;
 };

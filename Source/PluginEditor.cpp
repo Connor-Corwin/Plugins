@@ -71,19 +71,67 @@ void KnobPanel::resized()
                           .withCentre (area.getCentre()).toNearestInt());
 }
 
+void KnobPanel::setKnobEnabled (bool shouldBeEnabled)
+{
+    if (slider.isEnabled() == shouldBeEnabled)
+        return;
+
+    slider.setEnabled (shouldBeEnabled);
+    repaint();
+}
+
 void KnobPanel::paint (juce::Graphics& g)
 {
     auto area = getLocalBounds().toFloat();
     const float labelHeight = area.getHeight() * 0.15f;
+    const float textAlpha = slider.isEnabled() ? 1.0f : 0.4f;
 
-    g.setColour (Palette::textDim);
+    g.setColour (Palette::textDim.withMultipliedAlpha (textAlpha));
     g.setFont (panelFont (juce::jmax (8.0f, 9.5f * uiScale), true));
     g.drawText (title, area.removeFromTop (labelHeight), juce::Justification::centred, false);
 
-    g.setColour (Palette::text);
+    g.setColour (Palette::text.withMultipliedAlpha (textAlpha));
     g.setFont (lcdFont (juce::jmax (9.0f, 11.5f * uiScale)));
     g.drawText (slider.getTextFromValue (slider.getValue()),
                 area.removeFromBottom (labelHeight), juce::Justification::centred, false);
+}
+
+//==============================================================================
+ModeSwitch::ModeSwitch (juce::Colour accent) : juce::Button ("mode"), accentColour (accent)
+{
+    setClickingTogglesState (true);
+}
+
+void ModeSwitch::paintButton (juce::Graphics& g, bool isMouseOver, bool isButtonDown)
+{
+    const auto bounds = getLocalBounds().toFloat().reduced (0.5f);
+    const float radius = bounds.getHeight() * 0.5f;
+    const bool isPass = getToggleState();
+
+    g.setColour (Palette::lcdBack);
+    g.fillRoundedRectangle (bounds, radius);
+
+    // The lit half is whichever mode is selected.
+    auto selected = isPass ? bounds.withTrimmedLeft (bounds.getWidth() * 0.5f)
+                           : bounds.withTrimmedRight (bounds.getWidth() * 0.5f);
+
+    const float alpha = isButtonDown ? 1.0f : (isMouseOver ? 0.9f : 0.78f);
+    g.setColour (accentColour.withAlpha (alpha));
+    g.fillRoundedRectangle (selected.reduced (1.5f), radius - 1.5f);
+
+    g.setColour (Palette::panelEdge);
+    g.drawRoundedRectangle (bounds, radius, 1.0f);
+
+    g.setFont (panelFont (juce::jmax (7.5f, 8.5f * uiScale), true));
+
+    const auto leftHalf  = bounds.withTrimmedRight (bounds.getWidth() * 0.5f);
+    const auto rightHalf = bounds.withTrimmedLeft (bounds.getWidth() * 0.5f);
+
+    g.setColour (isPass ? Palette::textDim : Palette::panelEdge);
+    g.drawText ("SHELF", leftHalf, juce::Justification::centred, false);
+
+    g.setColour (isPass ? Palette::panelEdge : Palette::textDim);
+    g.drawText ("PASS", rightHalf, juce::Justification::centred, false);
 }
 
 //==============================================================================
@@ -100,6 +148,10 @@ SPXAmbienceAudioProcessorEditor::SPXAmbienceAudioProcessorEditor (SPXAmbienceAud
         { timeKnob,     SPXAmbienceAudioProcessor::ParamID::time     },
         { decayKnob,    SPXAmbienceAudioProcessor::ParamID::decay    },
         { sizeKnob,     SPXAmbienceAudioProcessor::ParamID::size     },
+        { lowFreqKnob,  SPXAmbienceAudioProcessor::ParamID::lowEqFreq  },
+        { lowGainKnob,  SPXAmbienceAudioProcessor::ParamID::lowEqGain  },
+        { highFreqKnob, SPXAmbienceAudioProcessor::ParamID::highEqFreq },
+        { highGainKnob, SPXAmbienceAudioProcessor::ParamID::highEqGain },
         { inputKnob,    SPXAmbienceAudioProcessor::ParamID::input    },
         { mixKnob,      SPXAmbienceAudioProcessor::ParamID::mix      },
         { outputKnob,   SPXAmbienceAudioProcessor::ParamID::output   }
@@ -122,6 +174,30 @@ SPXAmbienceAudioProcessorEditor::SPXAmbienceAudioProcessorEditor (SPXAmbienceAud
         }
 
         attachments.push_back (std::make_unique<Attachment> (processor.apvts, binding.id, binding.knob.slider));
+    }
+
+    addAndMakeVisible (lowModeSwitch);
+    addAndMakeVisible (highModeSwitch);
+
+    lowModeAttachment = std::make_unique<ButtonAttachment> (
+        processor.apvts, SPXAmbienceAudioProcessor::ParamID::lowEqMode, lowModeSwitch);
+    highModeAttachment = std::make_unique<ButtonAttachment> (
+        processor.apvts, SPXAmbienceAudioProcessor::ParamID::highEqMode, highModeSwitch);
+
+    // Gain does nothing in Pass mode, so the knob greys out rather than
+    // sitting there looking live.
+    if (auto* lowMode = processor.apvts.getParameter (SPXAmbienceAudioProcessor::ParamID::lowEqMode))
+    {
+        lowModeWatcher = std::make_unique<juce::ParameterAttachment> (
+            *lowMode, [this] (float v) { lowGainKnob.setKnobEnabled (v < 0.5f); });
+        lowModeWatcher->sendInitialUpdate();
+    }
+
+    if (auto* highMode = processor.apvts.getParameter (SPXAmbienceAudioProcessor::ParamID::highEqMode))
+    {
+        highModeWatcher = std::make_unique<juce::ParameterAttachment> (
+            *highMode, [this] (float v) { highGainKnob.setKnobEnabled (v < 0.5f); });
+        highModeWatcher->sendInitialUpdate();
     }
 
     // Hooked up only once the attachments have pushed their initial values,
@@ -207,7 +283,15 @@ void SPXAmbienceAudioProcessorEditor::paint (juce::Graphics& g)
                      "REVERB", Palette::accentWarm, 9.5f * s);
 
     drawSectionRule (g, { 22.0f * s, 272.0f * s, getWidth() - 44.0f * s, 14.0f * s },
+                     "EQ  (WET ONLY)", Palette::accentEq, 9.5f * s);
+
+    drawSectionRule (g, { 22.0f * s, 452.0f * s, getWidth() - 44.0f * s, 14.0f * s },
                      "LEVELS", Palette::accentCool, 9.5f * s);
+
+    // A hairline between the two EQ bands, so the pairs read as Low and High
+    // rather than four unrelated knobs.
+    g.setColour (Palette::ridge.withAlpha (0.55f));
+    g.fillRect (static_cast<float> (getWidth()) * 0.5f, 296.0f * s, 1.0f, 128.0f * s);
 
     // --- footer -------------------------------------------------------------
     g.setColour (Palette::textDim.withAlpha (0.7f));
@@ -227,8 +311,12 @@ void SPXAmbienceAudioProcessorEditor::resized()
     lcdBounds = juce::Rectangle<float> (getWidth() - 246.0f * s, 16.0f * s, 224.0f * s, 34.0f * s);
 
     for (auto* knob : { &preDelayKnob, &timeKnob, &decayKnob, &sizeKnob,
+                        &lowFreqKnob, &lowGainKnob, &highFreqKnob, &highGainKnob,
                         &inputKnob, &mixKnob, &outputKnob })
         knob->setUiScale (s);
+
+    lowModeSwitch.setUiScale (s);
+    highModeSwitch.setUiScale (s);
 
     const int margin = juce::roundToInt (22.0f * s);
     const int usableWidth = getWidth() - margin * 2;
@@ -244,10 +332,36 @@ void SPXAmbienceAudioProcessorEditor::resized()
             row[i]->setBounds (margin + i * cellWidth, top, cellWidth, height);
     }
 
+    // EQ row: two bands, each a pair of knobs over a Shelf/Pass switch.
+    {
+        const int top = juce::roundToInt (292.0f * s);
+        const int knobHeight = juce::roundToInt (116.0f * s);
+        const int switchHeight = juce::roundToInt (22.0f * s);
+        const int switchWidth = juce::roundToInt (108.0f * s);
+        const int bandWidth = usableWidth / 2;
+        const int cellWidth = bandWidth / 2;
+
+        KnobPanel* bands[2][2] { { &lowFreqKnob, &lowGainKnob },
+                                 { &highFreqKnob, &highGainKnob } };
+        ModeSwitch* switches[2] { &lowModeSwitch, &highModeSwitch };
+
+        for (int band = 0; band < 2; ++band)
+        {
+            const int bandLeft = margin + band * bandWidth;
+
+            for (int k = 0; k < 2; ++k)
+                bands[band][k]->setBounds (bandLeft + k * cellWidth, top, cellWidth, knobHeight);
+
+            switches[band]->setBounds (bandLeft + (bandWidth - switchWidth) / 2,
+                                       top + knobHeight + juce::roundToInt (6.0f * s),
+                                       switchWidth, switchHeight);
+        }
+    }
+
     // Level row: three knobs.
     {
         const int cellWidth = usableWidth / 3;
-        const int top = juce::roundToInt (292.0f * s);
+        const int top = juce::roundToInt (472.0f * s);
         const int height = juce::roundToInt (122.0f * s);
 
         KnobPanel* row[] { &inputKnob, &mixKnob, &outputKnob };

@@ -122,6 +122,11 @@ void AmbienceEngine::prepare (double sampleRateIn, int /*maxBlockSize*/)
     sendHighPass.setCutoff (85.0f, sampleRate);
     sendLowPass.setCutoff (12500.0f, sampleRate);   // the SPX900 ran at 31.25 kHz
 
+    lowEqLogHz.prepare  (sampleRate, 30.0f);
+    lowEqGain.prepare   (sampleRate, 30.0f);
+    highEqLogHz.prepare (sampleRate, 30.0f);
+    highEqGain.prepare  (sampleRate, 30.0f);
+
     inputGain.prepare  (sampleRate, 20.0f);
     outputGain.prepare (sampleRate, 20.0f);
     dryGain.prepare    (sampleRate, 20.0f);
@@ -143,6 +148,11 @@ void AmbienceEngine::reset()
     sendLowPass.reset();
     dcL.reset();
     dcR.reset();
+
+    lowBandL.reset();
+    lowBandR.reset();
+    highBandL.reset();
+    highBandR.reset();
 
     for (std::size_t i = 0; i < kNumDiffusers; ++i)
     {
@@ -171,6 +181,23 @@ void AmbienceEngine::setParameters (const Parameters& p, bool snap)
     params.reverbTimeS = clampf (params.reverbTimeS, kMinReverbTimeS, kMaxReverbTimeS);
     params.inputDb     = clampf (params.inputDb, kMinLevelDb, kMaxLevelDb);
     params.outputDb    = clampf (params.outputDb, kMinLevelDb, kMaxLevelDb);
+    params.lowEqHz     = clampf (params.lowEqHz, kMinLowEqHz, kMaxLowEqHz);
+    params.highEqHz    = clampf (params.highEqHz, kMinHighEqHz, kMaxHighEqHz);
+    params.lowEqGainDb  = clampf (params.lowEqGainDb, -kMaxEqGainDb, kMaxEqGainDb);
+    params.highEqGainDb = clampf (params.highEqGainDb, -kMaxEqGainDb, kMaxEqGainDb);
+
+    lowEqLogHz.setTarget  (std::log (params.lowEqHz));
+    lowEqGain.setTarget   (params.lowEqGainDb);
+    highEqLogHz.setTarget (std::log (params.highEqHz));
+    highEqGain.setTarget  (params.highEqGainDb);
+
+    // In Pass mode the band always does something; in Shelf mode a flat
+    // setting is skipped entirely, which is what keeps the defaults
+    // bit-transparent.
+    lowBandActive  = params.lowEqMode == BandMode::pass
+                       || std::fabs (params.lowEqGainDb) > kEqBypassDb;
+    highBandActive = params.highEqMode == BandMode::pass
+                       || std::fabs (params.highEqGainDb) > kEqBypassDb;
 
     inputGain.setTarget  (dbToGain (params.inputDb));
     outputGain.setTarget (dbToGain (params.outputDb));
@@ -199,12 +226,77 @@ void AmbienceEngine::snapSmoothers()
     dryGain.setImmediate    (dryGain.getTargetValue());
     wetGain.setImmediate    (wetGain.getTargetValue());
     preDelaySamples.setImmediate (preDelaySamples.getTargetValue());
+    lowEqLogHz.setImmediate  (lowEqLogHz.getTargetValue());
+    lowEqGain.setImmediate   (lowEqGain.getTargetValue());
+    highEqLogHz.setImmediate (highEqLogHz.getTargetValue());
+    highEqGain.setImmediate  (highEqGain.getTargetValue());
 
     for (std::size_t i = 0; i < kNumTailLines; ++i)
     {
         tailDelay[i].setImmediate (tailBaseSamples[i]);
         tailFeedback[i].setImmediate (tailFeedback[i].getTargetValue());
         tailDamping[i].setImmediate (tailDamping[i].getTargetValue());
+    }
+
+    updateToneFilters();
+}
+
+//==============================================================================
+void AmbienceEngine::updateToneFilters()
+{
+    // The smoothers advance whether or not a band is switched in, so a band
+    // that comes back on picks up at the current knob position instead of
+    // sweeping up from wherever it was left.
+    const float lowHz   = clampf (std::exp (lowEqLogHz.next()), kMinLowEqHz, kMaxLowEqHz);
+    const float lowGain = lowEqGain.next();
+    const float highHz  = clampf (std::exp (highEqLogHz.next()),
+                                  kMinHighEqHz,
+                                  std::fmin (kMaxHighEqHz, static_cast<float> (sampleRate) * 0.45f));
+    const float highGain = highEqGain.next();
+
+    // A bypassed biquad holds whatever was in its delay line, which would pop
+    // on the first sample after it is switched back in.
+    if (lowBandActive && ! lowBandWasActive)
+    {
+        lowBandL.reset();
+        lowBandR.reset();
+    }
+
+    if (highBandActive && ! highBandWasActive)
+    {
+        highBandL.reset();
+        highBandR.reset();
+    }
+
+    lowBandWasActive = lowBandActive;
+    highBandWasActive = highBandActive;
+
+    if (lowBandActive)
+    {
+        if (params.lowEqMode == BandMode::pass)
+        {
+            lowBandL.setHighPass (lowHz, kPassQ, sampleRate);
+            lowBandR.setHighPass (lowHz, kPassQ, sampleRate);
+        }
+        else
+        {
+            lowBandL.setLowShelf (lowHz, lowGain, sampleRate);
+            lowBandR.setLowShelf (lowHz, lowGain, sampleRate);
+        }
+    }
+
+    if (highBandActive)
+    {
+        if (params.highEqMode == BandMode::pass)
+        {
+            highBandL.setLowPass (highHz, kPassQ, sampleRate);
+            highBandR.setLowPass (highHz, kPassQ, sampleRate);
+        }
+        else
+        {
+            highBandL.setHighShelf (highHz, highGain, sampleRate);
+            highBandR.setHighShelf (highHz, highGain, sampleRate);
+        }
     }
 }
 
@@ -274,6 +366,8 @@ void AmbienceEngine::recomputeTailGains()
 //==============================================================================
 void AmbienceEngine::updateControlRate()
 {
+    updateToneFilters();
+
     for (std::size_t i = 0; i < kNumTailLines; ++i)
     {
         lfoPhase[i] += lfoInc[i] * static_cast<float> (kControlBlock);
@@ -356,8 +450,22 @@ void AmbienceEngine::process (float* left, float* right, int numSamples)
         const float tailR = 0.5f * (tailState[1] - tailState[3] + tailState[5] - tailState[7]);
 
         // --- wet / dry -------------------------------------------------------
-        const float wetL = dcL.process (erL * kEarlyLevel + tailL * kTailLevel);
-        const float wetR = dcR.process (erR * kEarlyLevel + tailR * kTailLevel);
+        float wetL = dcL.process (erL * kEarlyLevel + tailL * kTailLevel);
+        float wetR = dcR.process (erR * kEarlyLevel + tailR * kTailLevel);
+
+        // Tone controls sit on the wet signal only, so the dry path stays
+        // untouched and 0% mix remains a bit-perfect bypass.
+        if (lowBandActive)
+        {
+            wetL = lowBandL.process (wetL);
+            wetR = lowBandR.process (wetR);
+        }
+
+        if (highBandActive)
+        {
+            wetL = highBandL.process (wetL);
+            wetR = highBandR.process (wetR);
+        }
 
         const float dg = dryGain.next();
         const float wg = wetGain.next();

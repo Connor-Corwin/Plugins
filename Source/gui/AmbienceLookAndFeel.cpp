@@ -27,7 +27,13 @@ void AmbienceLookAndFeel::drawRotarySlider (juce::Graphics& g, int x, int y, int
     const float radius = diameter * 0.5f;
 
     const float angle = rotaryStartAngle + sliderPos * (rotaryEndAngle - rotaryStartAngle);
-    const auto accent = slider.findColour (juce::Slider::rotarySliderFillColourId);
+
+    // A Gain knob whose band is in Pass mode is greyed out rather than hidden,
+    // so the panel does not reflow when the mode changes.
+    const bool enabled = slider.isEnabled();
+    const auto accent = slider.findColour (juce::Slider::rotarySliderFillColourId)
+                              .withMultipliedSaturation (enabled ? 1.0f : 0.15f)
+                              .withMultipliedBrightness (enabled ? 1.0f : 0.55f);
 
     const float arcRadius = radius * 0.88f;
     const float arcThickness = radius * 0.13f;
@@ -78,11 +84,11 @@ void AmbienceLookAndFeel::drawRotarySlider (juce::Graphics& g, int x, int y, int
                                  pointerThickness, bodyRadius * 0.52f, pointerThickness * 0.5f);
     pointer.applyTransform (juce::AffineTransform::rotation (angle).translated (centre));
 
-    g.setColour (Palette::text);
+    g.setColour (enabled ? Palette::text : Palette::textDim);
     g.fillPath (pointer);
 
     // A dot of accent at the centre ties the cap to its arc.
-    g.setColour (accent.withAlpha (slider.isMouseOverOrDragging() ? 0.9f : 0.55f));
+    g.setColour (accent.withAlpha (enabled && slider.isMouseOverOrDragging() ? 0.9f : 0.55f));
     g.fillEllipse (juce::Rectangle<float> (radius * 0.14f, radius * 0.14f).withCentre (centre));
 }
 

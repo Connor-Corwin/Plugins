@@ -17,6 +17,7 @@ namespace Palette
     const juce::Colour textDim      { 0xff717a88 };
     const juce::Colour accentWarm   { 0xffe08a2e };   // reverb section
     const juce::Colour accentCool   { 0xff3fb6a8 };   // level section
+    const juce::Colour accentEq     { 0xff8d7ae6 };   // EQ section
     const juce::Colour lcdBack      { 0xff0a0c0a };
     const juce::Colour lcdText      { 0xffffb454 };
 }

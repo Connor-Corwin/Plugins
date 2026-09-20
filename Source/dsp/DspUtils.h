@@ -202,6 +202,106 @@ private:
     float z = 0.0f;
 };
 
+
+//==============================================================================
+/** Transposed direct form II biquad, with RBJ cookbook coefficients.
+
+    Used for the wet-path tone controls. TDF2 is the usual choice when
+    coefficients are recalculated while audio is running, as they are here
+    when a frequency or gain knob is swept: its state variables stay bounded
+    and it degrades gracefully across a coefficient change.
+*/
+class Biquad
+{
+public:
+    void reset() noexcept { z1 = z2 = 0.0f; }
+
+    /** Straight through, for when a band is at 0 dB and can be skipped. */
+    void setBypass() noexcept
+    {
+        b0 = 1.0f;
+        b1 = b2 = a1 = a2 = 0.0f;
+    }
+
+    void setLowShelf (float freqHz, float gainDb, double sampleRate) noexcept
+    {
+        const float A = std::pow (10.0f, gainDb * 0.025f);      // sqrt of the linear gain
+        const float w0 = twoPi * freqHz / static_cast<float> (sampleRate);
+        const float cosW = std::cos (w0);
+        const float alpha = std::sin (w0) * 0.5f * 1.41421356f; // shelf slope S = 1
+        const float twoSqrtAAlpha = 2.0f * std::sqrt (A) * alpha;
+
+        normalise (        A * ((A + 1.0f) - (A - 1.0f) * cosW + twoSqrtAAlpha),
+                    2.0f * A * ((A - 1.0f) - (A + 1.0f) * cosW),
+                           A * ((A + 1.0f) - (A - 1.0f) * cosW - twoSqrtAAlpha),
+                               ((A + 1.0f) + (A - 1.0f) * cosW + twoSqrtAAlpha),
+                   -2.0f *     ((A - 1.0f) + (A + 1.0f) * cosW),
+                               ((A + 1.0f) + (A - 1.0f) * cosW - twoSqrtAAlpha));
+    }
+
+    void setHighShelf (float freqHz, float gainDb, double sampleRate) noexcept
+    {
+        const float A = std::pow (10.0f, gainDb * 0.025f);
+        const float w0 = twoPi * freqHz / static_cast<float> (sampleRate);
+        const float cosW = std::cos (w0);
+        const float alpha = std::sin (w0) * 0.5f * 1.41421356f;
+        const float twoSqrtAAlpha = 2.0f * std::sqrt (A) * alpha;
+
+        normalise (         A * ((A + 1.0f) + (A - 1.0f) * cosW + twoSqrtAAlpha),
+                    -2.0f * A * ((A - 1.0f) + (A + 1.0f) * cosW),
+                            A * ((A + 1.0f) + (A - 1.0f) * cosW - twoSqrtAAlpha),
+                                ((A + 1.0f) - (A - 1.0f) * cosW + twoSqrtAAlpha),
+                     2.0f *     ((A - 1.0f) - (A + 1.0f) * cosW),
+                                ((A + 1.0f) - (A - 1.0f) * cosW - twoSqrtAAlpha));
+    }
+
+    void setHighPass (float freqHz, float q, double sampleRate) noexcept
+    {
+        const float w0 = twoPi * freqHz / static_cast<float> (sampleRate);
+        const float cosW = std::cos (w0);
+        const float alpha = std::sin (w0) / (2.0f * q);
+        const float oneCos = 1.0f + cosW;
+
+        normalise (oneCos * 0.5f, -oneCos, oneCos * 0.5f,
+                   1.0f + alpha, -2.0f * cosW, 1.0f - alpha);
+    }
+
+    void setLowPass (float freqHz, float q, double sampleRate) noexcept
+    {
+        const float w0 = twoPi * freqHz / static_cast<float> (sampleRate);
+        const float cosW = std::cos (w0);
+        const float alpha = std::sin (w0) / (2.0f * q);
+        const float oneMinusCos = 1.0f - cosW;
+
+        normalise (oneMinusCos * 0.5f, oneMinusCos, oneMinusCos * 0.5f,
+                   1.0f + alpha, -2.0f * cosW, 1.0f - alpha);
+    }
+
+    float process (float x) noexcept
+    {
+        const float y = b0 * x + z1;
+        z1 = flushDenormal (b1 * x - a1 * y + z2);
+        z2 = flushDenormal (b2 * x - a2 * y);
+        return y;
+    }
+
+private:
+    static constexpr float twoPi = 6.28318530717959f;
+
+    void normalise (float nb0, float nb1, float nb2, float na0, float na1, float na2) noexcept
+    {
+        const float inv = 1.0f / na0;
+        b0 = nb0 * inv;
+        b1 = nb1 * inv;
+        b2 = nb2 * inv;
+        a1 = na1 * inv;
+        a2 = na2 * inv;
+    }
+
+    float b0 = 1.0f, b1 = 0.0f, b2 = 0.0f, a1 = 0.0f, a2 = 0.0f;
+    float z1 = 0.0f, z2 = 0.0f;
+};
+
 //==============================================================================
 /** One-pole parameter smoother. Reaches ~63% of the target in `timeMs`. */
 class Smoother

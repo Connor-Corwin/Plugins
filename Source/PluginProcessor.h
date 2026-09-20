@@ -60,6 +60,13 @@ public:
         static constexpr const char* size     = "size";
         static constexpr const char* mix      = "mix";
         static constexpr const char* output   = "output";
+
+        static constexpr const char* lowEqFreq  = "eqlowfreq";
+        static constexpr const char* lowEqGain  = "eqlowgain";
+        static constexpr const char* lowEqMode  = "eqlowmode";
+        static constexpr const char* highEqFreq = "eqhighfreq";
+        static constexpr const char* highEqGain = "eqhighgain";
+        static constexpr const char* highEqMode = "eqhighmode";
     };
 
 private:
@@ -75,6 +82,13 @@ private:
     std::atomic<float>* sizeParam     = nullptr;
     std::atomic<float>* mixParam      = nullptr;
     std::atomic<float>* outputParam   = nullptr;
+
+    std::atomic<float>* lowEqFreqParam  = nullptr;
+    std::atomic<float>* lowEqGainParam  = nullptr;
+    std::atomic<float>* lowEqModeParam  = nullptr;
+    std::atomic<float>* highEqFreqParam = nullptr;
+    std::atomic<float>* highEqGainParam = nullptr;
+    std::atomic<float>* highEqModeParam = nullptr;
 
     int currentProgram = 0;
 

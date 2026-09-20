@@ -53,6 +53,29 @@ VST3.
 | **Mix** | 0 … 100 % | Dry/wet, equal power. At 0 % the dry signal passes through bit-identical, so the plugin is safe to leave inserted. |
 | **Output** | −24 … +24 dB | Level out. |
 
+### EQ (wet only)
+
+Two bands that shape the reverb and leave the dry signal alone, so the 0 % mix
+bypass stays bit-perfect no matter how the EQ is set. They meet at 1.5 kHz.
+
+| Control | Range | What it does |
+|---|---|---|
+| **Low Freq** | 20 Hz … 1.5 kHz | Corner frequency of the low band. |
+| **Low Gain** | −6 … +6 dB | Shelf amount. Greys out in Pass mode. |
+| **High Freq** | 1.5 kHz … 20 kHz | Corner frequency of the high band. |
+| **High Gain** | −6 … +6 dB | Shelf amount. Greys out in Pass mode. |
+| **Shelf / Pass** | per band | **Shelf** boosts or cuts past the corner. **Pass** ignores Gain and becomes a 12 dB/octave filter: high-pass on the Low band, low-pass on the High band. Both in Pass mode gives you a band-pass on the reverb. |
+
+Both bands default to Shelf at 0 dB, which is skipped in the signal path
+entirely rather than computed as a flat filter. Every factory preset leaves
+them there, so presets sound exactly as they did before the EQ existed.
+
+**One thing to know:** the wet path already runs through a fixed 12.5 kHz
+low-pass that emulates the SPX900's 31.25 kHz converters, and that stays in
+place. It is a lot of why this sounds like the hardware. The practical effect
+is that the High band has little audible reach above ~12.5 kHz — the top of
+its range is there for completeness, not because it does much.
+
 Six factory programs are included (SPX Ambience, Tight Room, Drum Ambience,
 Vocal Space, Wide Chamber, Long Hall), reachable from the host's program menu.
 
@@ -168,20 +191,34 @@ ctest --test-dir build-test --output-on-failure
 - **Size** pushing reflection energy later.
 - **Pre-delay** offsetting the wet onset.
 - **L/R decorrelation** of the impulse response.
-- **Bypass transparency** at 0 % mix (bit-identical).
+- **Bypass transparency** at 0 % mix (bit-identical), including with both EQ
+  bands in Pass mode, which is what proves the EQ is wet-only.
+- **Tone filter responses** — shelf gains at ±6 dB, and −3 dB at the corner
+  with 12 dB/octave beyond it for the Pass modes, measured by DFT of each
+  filter's impulse response.
+- **EQ neutrality** — a 0 dB shelf produces a bit-identical impulse response
+  whatever its frequency.
+- **EQ effect on the tail** — octave-band energy before and after, with a
+  cascaded analyser steep enough that out-of-band leakage does not dominate
+  the reading.
 - **Stability** — a minute of silence after a full-scale burst into a 10 s
   tail, checking for NaN, runaway feedback and denormal stalls.
 
 ## Cost
 
 Measured on the container this was developed in (x86-64, `-O2`), rendering
-60 s of stereo audio at a 2 s reverb time:
+60 s of stereo audio at a 2 s reverb time. Figures move around with machine
+and load, so treat them as an order of magnitude rather than a spec:
 
-| Sample rate | Realtime factor | One core |
+| Sample rate | EQ flat | EQ engaged |
 |---|---|---|
-| 44.1 kHz | 152× | 0.66 % |
-| 48 kHz | 146× | 0.69 % |
-| 96 kHz | 76× | 1.31 % |
+| 44.1 kHz | 0.45 % of one core | 0.53 % |
+| 48 kHz | 0.48 % | 0.56 % |
+| 96 kHz | 0.96 % | 0.98 % |
+
+"EQ engaged" is the worst case, with both bands filtering rather than being
+skipped. At their 0 dB defaults the bands cost nothing at all, because they
+are bypassed rather than computed.
 
 Reproduce with `tools/DspBench.cpp`:
 
@@ -222,6 +259,12 @@ in ─┬───────────────────────�
 - **Mono send.** Like the hardware, the reverb is fed from a mono sum. It keeps
   the reflection pattern stable and avoids phase problems on stereo sources;
   the returns are stereo.
+- **Tone controls.** Two RBJ biquads per channel on the wet sum, after the DC
+  blocker and before the dry/wet mix. Coefficients are recalculated at control
+  rate from smoothed values, with frequency smoothed in the log domain so a
+  sweep sounds even rather than rushing at the bottom. A band sitting at 0 dB
+  in Shelf mode is skipped outright, and its filter state is reset when it
+  switches back in so it cannot pop.
 
 ## Licence
 

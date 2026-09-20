@@ -66,6 +66,53 @@ juce::AudioProcessorValueTreeState::ParameterLayout SPXAmbienceAudioProcessor::c
         juce::ParameterID { ParamID::output, 1 }, "Output", levelRange, 0.0f,
         juce::AudioParameterFloatAttributes{}.withStringFromValueFunction (decibels).withLabel ("dB")));
 
+    // --- wet-path tone controls -------------------------------------------
+    auto hertz = [] (float v, int)
+    {
+        return v >= 1000.0f ? juce::String (v / 1000.0f, 2) + " kHz"
+                            : juce::String (juce::roundToInt (v)) + " Hz";
+    };
+
+    auto gainDb = [] (float v, int)
+    {
+        return (v > 0.0f ? "+" : "") + juce::String (v, 1) + " dB";
+    };
+
+    auto modeText = [] (bool v, int) { return juce::String (v ? "Pass" : "Shelf"); };
+
+    // Logarithmic, so the knobs feel even across their range.
+    Range lowFreqRange { Engine::kMinLowEqHz, Engine::kMaxLowEqHz, 1.0f };
+    lowFreqRange.setSkewForCentre (180.0f);
+
+    Range highFreqRange { Engine::kMinHighEqHz, Engine::kMaxHighEqHz, 1.0f };
+    highFreqRange.setSkewForCentre (5500.0f);
+
+    Range eqGainRange { -Engine::kMaxEqGainDb, Engine::kMaxEqGainDb, 0.1f };
+
+    layout.add (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { ParamID::lowEqFreq, 1 }, "Low Freq", lowFreqRange, 120.0f,
+        juce::AudioParameterFloatAttributes{}.withStringFromValueFunction (hertz).withLabel ("Hz")));
+
+    layout.add (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { ParamID::lowEqGain, 1 }, "Low Gain", eqGainRange, 0.0f,
+        juce::AudioParameterFloatAttributes{}.withStringFromValueFunction (gainDb).withLabel ("dB")));
+
+    layout.add (std::make_unique<juce::AudioParameterBool> (
+        juce::ParameterID { ParamID::lowEqMode, 1 }, "Low Mode", false,
+        juce::AudioParameterBoolAttributes{}.withStringFromValueFunction (modeText)));
+
+    layout.add (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { ParamID::highEqFreq, 1 }, "High Freq", highFreqRange, 8000.0f,
+        juce::AudioParameterFloatAttributes{}.withStringFromValueFunction (hertz).withLabel ("Hz")));
+
+    layout.add (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { ParamID::highEqGain, 1 }, "High Gain", eqGainRange, 0.0f,
+        juce::AudioParameterFloatAttributes{}.withStringFromValueFunction (gainDb).withLabel ("dB")));
+
+    layout.add (std::make_unique<juce::AudioParameterBool> (
+        juce::ParameterID { ParamID::highEqMode, 1 }, "High Mode", false,
+        juce::AudioParameterBoolAttributes{}.withStringFromValueFunction (modeText)));
+
     return layout;
 }
 
@@ -83,6 +130,13 @@ SPXAmbienceAudioProcessor::SPXAmbienceAudioProcessor()
     sizeParam     = apvts.getRawParameterValue (ParamID::size);
     mixParam      = apvts.getRawParameterValue (ParamID::mix);
     outputParam   = apvts.getRawParameterValue (ParamID::output);
+
+    lowEqFreqParam  = apvts.getRawParameterValue (ParamID::lowEqFreq);
+    lowEqGainParam  = apvts.getRawParameterValue (ParamID::lowEqGain);
+    lowEqModeParam  = apvts.getRawParameterValue (ParamID::lowEqMode);
+    highEqFreqParam = apvts.getRawParameterValue (ParamID::highEqFreq);
+    highEqGainParam = apvts.getRawParameterValue (ParamID::highEqGain);
+    highEqModeParam = apvts.getRawParameterValue (ParamID::highEqMode);
 }
 
 //==============================================================================
@@ -96,6 +150,14 @@ Engine::Parameters SPXAmbienceAudioProcessor::gatherParameters() const
     p.reverbTimeS = timeParam->load();
     p.decay       = decayParam->load() * 0.01f;
     p.size        = sizeParam->load() * 0.01f;
+
+    using Mode = Engine::BandMode;
+    p.lowEqHz      = lowEqFreqParam->load();
+    p.lowEqGainDb  = lowEqGainParam->load();
+    p.lowEqMode    = lowEqModeParam->load() > 0.5f ? Mode::pass : Mode::shelf;
+    p.highEqHz     = highEqFreqParam->load();
+    p.highEqGainDb = highEqGainParam->load();
+    p.highEqMode   = highEqModeParam->load() > 0.5f ? Mode::pass : Mode::shelf;
     return p;
 }
 
@@ -197,6 +259,12 @@ void SPXAmbienceAudioProcessor::setCurrentProgram (int index)
     apply (ParamID::size,     program.sizePercent);
     apply (ParamID::mix,      program.mixPercent);
     apply (ParamID::output,   program.outputDb);
+    apply (ParamID::lowEqFreq,  program.lowEqHz);
+    apply (ParamID::lowEqGain,  program.lowEqGainDb);
+    apply (ParamID::lowEqMode,  program.lowEqPass ? 1.0f : 0.0f);
+    apply (ParamID::highEqFreq, program.highEqHz);
+    apply (ParamID::highEqGain, program.highEqGainDb);
+    apply (ParamID::highEqMode, program.highEqPass ? 1.0f : 0.0f);
 }
 
 //==============================================================================
