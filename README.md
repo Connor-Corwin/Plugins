@@ -13,6 +13,34 @@ Builds as **AU**, **VST3** and a **Standalone** app, as a universal
 ![SPX Ambience](docs/plugin.png)
 
 
+## Quick start
+
+On a Mac, from a clone of this repository:
+
+```sh
+./build-macos.sh
+```
+
+That checks your prerequisites, builds a universal Release binary, installs
+the AU and VST3 into `~/Library/Audio/Plug-Ins`, ad-hoc signs them and runs
+Apple's `auval` on the Audio Unit. The first run takes a few minutes because
+JUCE is downloaded and compiled; later runs are quick. Then rescan plugins in
+your DAW and look for **SPX Ambience** under *Connor Corwin*.
+
+You need the Xcode command line tools (`xcode-select --install`) and CMake
+(`brew install cmake`). The script tells you if either is missing.
+
+| Format | Where it goes | Hosts |
+|---|---|---|
+| AU | `~/Library/Audio/Plug-Ins/Components` | Logic Pro, GarageBand, Live, Reaper |
+| VST3 | `~/Library/Audio/Plug-Ins/VST3` | Ableton Live, Reaper, Studio One, Bitwig, Cubase, FL Studio |
+| Standalone | `build/SPXAmbience_artefacts/Release/Standalone` | runs on its own, no host |
+
+**Pro Tools is the exception.** It only loads AAX, and building AAX requires a
+paid Avid developer agreement and PACE signing, so it is not something this
+project can produce. Every other major macOS DAW is covered by the AU or the
+VST3.
+
 ## Controls
 
 | Control | Range | What it does |
@@ -36,9 +64,9 @@ behind it. Keeping them apart is most of what makes the box sound like a room
 rather than a reverb — you can have a tight, snappy cluster over a long tail,
 or a long spray over almost no tail.
 
-## Building
+## Building by hand
 
-You need Xcode command line tools and CMake 3.22+.
+`build-macos.sh` above wraps this, but the plain CMake path is:
 
 ```sh
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
@@ -69,12 +97,16 @@ auval -v aufx Spxa Ccor
 
 ### Signing
 
-An unsigned component loads fine locally. To load it on another machine
-without Gatekeeper complaints, ad-hoc sign it at minimum:
+`build-macos.sh` ad-hoc signs both bundles for you. To do it by hand (Apple
+deprecated `--deep` for signing, so sign each bundle directly):
 
 ```sh
-codesign --force --deep -s - ~/Library/Audio/Plug-Ins/Components/"SPX Ambience.component"
+codesign --force --sign - ~/Library/Audio/Plug-Ins/Components/"SPX Ambience.component"
+codesign --force --sign - ~/Library/Audio/Plug-Ins/VST3/"SPX Ambience.vst3"
 ```
+
+An ad-hoc signature is enough for your own machine. Distributing to someone
+else needs a Developer ID certificate and notarisation.
 
 ## Rendering audio offline
 
